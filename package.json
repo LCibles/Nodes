@@ -1,0 +1,12 @@
+{
+  "name": "nodes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Tablero de nodos circulares para crear, organizar y conectar ideas.",
+  "scripts": {
+    "start": "node scripts/serve.cjs",
+    "dev": "node scripts/serve.cjs",
+    "check": "node --check dist/app.js && node --check scripts/serve.cjs"
+  },
+  "engines": { "node": ">=22" }
+}
