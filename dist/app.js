@@ -174,15 +174,17 @@
       drag.canCreate = false;
       return;
     }
-    if (e.ctrlKey || e.metaKey) {
-      const rect = canvas.getBoundingClientRect();
-      zoomTo(view.zoom * Math.exp(-dy * .003), e.clientX - rect.left, e.clientY - rect.top);
-    } else {
+    const zoomModifier = e.ctrlKey || e.metaKey;
+    if (!zoomModifier && Math.abs(dx) > Math.abs(dy)) {
       view.x -= dx;
-      view.y -= dy;
       applyView();
       persist();
+      return;
     }
+    if (dy === 0) return;
+    const rect = canvas.getBoundingClientRect();
+    const zoomDelta = zoomModifier ? dy : clamp(dy, -120, 120);
+    zoomTo(view.zoom * Math.exp(-zoomDelta * .003), e.clientX - rect.left, e.clientY - rect.top);
   }, {passive:false});
   function fit(){const r=canvas.getBoundingClientRect();if(!nodes.length){view={x:r.width*.38,y:r.height*.48,zoom:1};applyView();return;}const minX=Math.min(...nodes.map(n=>n.x))-85,maxX=Math.max(...nodes.map(n=>n.x))+85,minY=Math.min(...nodes.map(n=>n.y))-90,maxY=Math.max(...nodes.map(n=>n.y))+85;const availableWidth=Math.max(220,r.width-(r.width>800?390:48)),availableHeight=Math.max(180,r.height-290);view.zoom=clamp(Math.min(availableWidth/(maxX-minX),availableHeight/(maxY-minY),1.15),.25,2);view.x=r.width*(r.width>800?.46:.5)-(minX+maxX)/2*view.zoom;view.y=r.height*.5+15-(minY+maxY)/2*view.zoom;applyView();persist();}
   function removeSelected(){if(!selected&&!selectedEdge)return;remember();if(selected){nodes=nodes.filter(n=>n.id!==selected);edges=edges.filter(e=>e.from!==selected&&e.to!==selected);}else edges=edges.filter(e=>e.id!==selectedEdge);selected=null;selectedEdge=null;render();persist();toast('Eliminado. Puedes deshacer con Ctrl + Z.');}
