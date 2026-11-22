@@ -25,3 +25,16 @@
 .repo-node .node-label { max-width:151px; }
 .repo-branch { display:block; margin-bottom:7px; font-size:12px; color:#3d6477; }
 .file-node .node-label { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; }
+
+.code-node .node-label { max-width:109px; max-height:106px; overflow:auto; font-size:13px; }
+.code-range { display:block; margin-top:5px; font-size:10px; font-weight:500; line-height:1.25; }
+.structure-edge { stroke:#889eaa; stroke-width:2; fill:none; }
+.css-match-edge { stroke:#86509d; stroke-width:2.8; stroke-dasharray:6 4; fill:none; }
+#css-legend { position:absolute; z-index:1; top:77px; right:39px; display:flex; align-items:center; gap:7px; color:#75478a; font-size:11px; pointer-events:none; }
+#css-legend span { width:21px; border-top:2px dashed #86509d; }
+#code-detail { color:#556e62; overflow-wrap:anywhere; margin:8px 0 12px; }
+@media(max-width:700px) { #css-legend { top:154px; right:auto; left:24px; } }
+
+.code-node .node-label { overflow:hidden; }
+.code-part-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; }
+.css-match-edge.focused { stroke:#702f88; stroke-width:4; }

@@ -22,6 +22,7 @@
 <main id="canvas" tabindex="0" aria-label="Tablero de nodos. Pulsa N para agregar un nodo. Arrastra el fondo para desplazarte.">
   <div class="canvas-heading"><span class="eyebrow"></span><h1><span>.</span></h1><p></p></div>
   <div class="board-meta"><span class="live-dot"></span> TABLERO LIBRE <span class="meta-line"></span><span id="count">3 nodos</span></div>
+  <div id="css-legend" hidden><span></span> CSS → HTML</div>
   <div id="world"><svg id="edges" aria-label="Conexiones entre nodos"></svg><div id="nodes"></div></div>
   <div id="empty" hidden>Todo empieza con una idea.<button class="btn primary" id="empty-add">Crear mi primer nodo</button></div>
   <aside id="inspector" hidden aria-label="Propiedades del nodo">
@@ -33,7 +34,11 @@
       <button id="github-refresh" class="btn" hidden>Actualizar</button>
       <a id="github-open" target="_blank" rel="noopener noreferrer" hidden>Ver en GitHub</a>
       <button id="github-preview" class="btn" hidden>Ver contenido</button>
+      <button id="code-map" class="btn" hidden>Mapear estructura</button>
+      <button id="code-expand" class="btn" hidden>Desplegar hijos</button>
+      <button id="code-matches" class="btn" hidden>Mostrar coincidencias HTML</button>
     </div>
+    <p id="code-detail" class="panel-note" hidden></p>
     <div class="panel-actions"><button id="duplicate" class="btn"><svg><use href="#i-copy"/></svg>Duplicar</button><button id="delete" class="icon-btn danger" aria-label="Eliminar nodo"><svg><use href="#i-trash"/></svg></button></div>
     <p class="panel-note">Arrastra el círculo para moverlo.<br>Usa Conectar para unir tus ideas.</p>
   </aside>
@@ -64,4 +69,4 @@
   </dialog>
   <dialog id="help"><h2>Tu espacio de ideas</h2><p><kbd>N</kbd> Agregar nodo<br><kbd>V</kbd> Seleccionar y mover nodos<br><kbd>C</kbd> Conectar dos nodos<br><kbd>H</kbd> Mover el lienzo<br><kbd>Supr</kbd> Eliminar selección<br><kbd>Ctrl Z</kbd> Deshacer<br><kbd>Esc</kbd> Cancelar / cerrar selección</p><button class="btn primary" id="close-help">Entendido</button></dialog>
   <button id="help-button" aria-label="Ver atajos del teclado" title="Atajos del teclado">?</button>
-</main><script src="github.js"></script><script src="app.js"></script></body></html>
+</main><script src="github.js"></script><script src="code-map.js"></script><script src="app.js"></script></body></html>

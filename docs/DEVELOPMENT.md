@@ -2,7 +2,7 @@
 
 ## Organización
 
-La aplicación es un sitio estático sin instalación de dependencias, servidor de aplicación ni proceso de compilación. Edita directamente los tres archivos de `dist/` y recarga el navegador después de guardar.
+La interfaz se sirve desde `dist/`. Los analizadores de HTML y CSS se empaquetan desde `src/code-map.mjs`. Instala las dependencias con `pnpm install --frozen-lockfile` y genera ese paquete con `node scripts/build-code-map.mjs` antes de iniciar la vista local.
 
 - `index.html`: estructura del tablero, botones, panel de propiedades, ayuda e iconos SVG embebidos.
 - `style.css`: tipografía, paleta, cuadrícula, nodos, herramientas y reglas para pantallas estrechas.

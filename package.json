@@ -8,5 +8,14 @@
     "dev": "node scripts/serve.cjs",
     "check": "node --check dist/app.js && node --check scripts/serve.cjs"
   },
-  "engines": { "node": ">=22" }
+  "engines": {
+    "node": ">=22"
+  },
+  "devDependencies": {
+    "css-select": "7.0.0",
+    "css-tree": "3.2.1",
+    "esbuild": "0.28.2",
+    "parse5": "8.1.1",
+    "parse5-htmlparser2-tree-adapter": "8.0.2"
+  }
 }

@@ -31,9 +31,29 @@
   }
   function toast(message){clearTimeout(toastTimer);$('toast').textContent=message;$('toast').classList.add('visible');toastTimer=setTimeout(()=>$('toast').classList.remove('visible'),2800);}
   function styleColor(el,color){const p=palette[color];el.style.setProperty('--node-bg',p.bg);el.style.setProperty('--node-border',p.border);el.style.setProperty('--node-ink',p.ink);}
+  function visibleNodes() {
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    const visibility = new Map();
+    function isVisible(node) {
+      if (visibility.has(node.id)) return visibility.get(node.id);
+      visibility.set(node.id, false);
+      const parent = node.code && byId.get(node.code.parent);
+      const visible = !node.code || Boolean(parent && !parent.mapCollapsed && isVisible(parent));
+      visibility.set(node.id, visible);
+      return visible;
+    }
+    return nodes.filter(isVisible);
+  }
+
+  function lineLabel(part) {
+    if (!part.start) return 'Etiqueta implícita';
+    return part.start === part.end ? `Línea ${part.start}` : `Líneas ${part.start}–${part.end}`;
+  }
+
   function render(){
+    const visible = visibleNodes();
     nodesEl.replaceChildren();
-    nodes.forEach((n,i)=>{
+    visible.forEach((n,i)=>{
       const el=document.createElement('div');el.className='node';el.dataset.id=n.id;el.setAttribute('role','button');el.tabIndex=0;el.setAttribute('aria-label',`${n.label}. Nodo ${i+1}`);el.setAttribute('aria-pressed',String(selected===n.id));el.style.left=n.x+'px';el.style.top=n.y+'px';styleColor(el,n.color);
       const number=document.createElement('span');number.className='node-number';number.textContent=String(i+1).padStart(2,'0');
       const label=document.createElement('span');label.className='node-label';label.textContent=n.label;
@@ -50,6 +70,19 @@
         el.classList.add('file-node');
         el.title = n.file.path;
         el.setAttribute('aria-label', n.file.path);
+      } else if (n.code) {
+        el.classList.add('code-node', n.code.kind + '-part');
+        el.title = n.code.path + ' · ' + n.label + ' · ' + lineLabel(n.code);
+        el.setAttribute('aria-label', el.title);
+        const name = document.createElement('span');
+        name.className = 'code-part-name';
+        name.textContent = n.label;
+        const range = document.createElement('span');
+        range.className = 'code-range';
+        range.textContent = n.code.kind === 'css'
+          ? n.code.path.split('/').at(-1) + ' · ' + lineLabel(n.code)
+          : lineLabel(n.code);
+        label.replaceChildren(name, range);
       }
       const port=document.createElement('span');port.className='node-port';el.append(number,label,port);
       if(n.id===selected)el.classList.add('selected');if(n.id===source)el.classList.add('connect-source');
@@ -58,11 +91,12 @@
       el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();if(mode==='connect')connect(n.id);else activateNode(n);}});
       nodesEl.append(el);
     });
-    renderEdges();$('count').textContent=`${nodes.length} ${nodes.length===1?'nodo':'nodos'}`;$('empty').hidden=nodes.length>0;updatePanel();applyView();
+    renderEdges(visible);$('count').textContent=`${visible.length} ${visible.length===1?'nodo':'nodos'}`;$('empty').hidden=nodes.length>0;updatePanel();applyView();
   }
-  function renderEdges(){
+  function renderEdges(visible = visibleNodes()){
     edgesEl.replaceChildren();
-    const byId = new Map(nodes.map(node => [node.id, node]));
+    const byId = new Map(visible.map(node => [node.id, node]));
+    let hasCssMatches = false;
     for(const edge of edges){
       const a=byId.get(edge.from),b=byId.get(edge.to);if(!a||!b)continue;
       const dx=b.x-a.x,dy=b.y-a.y,d=Math.hypot(dx,dy)||1;
@@ -70,17 +104,31 @@
       const x1=a.x+dx/d*ra,y1=a.y+dy/d*ra,x2=b.x-dx/d*rb,y2=b.y-dy/d*rb;
       const bend=Math.max(45,Math.abs(x2-x1)*.42),direction=dx>=0?1:-1;
       const path=`M ${x1} ${y1} C ${x1+bend*direction} ${y1}, ${x2-bend*direction} ${y2}, ${x2} ${y2}`;
+      if (edge.kind === 'css-match' || edge.kind === 'structure') {
+        const line = document.createElementNS('http://www.w3.org/2000/svg','path');
+        line.setAttribute('d', path);
+        const selectedMatch = selected === edge.from || selected === edge.to;
+        line.setAttribute('class', edge.kind === 'css-match'
+          ? 'css-match-edge' + (selectedMatch ? ' focused' : '')
+          : 'structure-edge');
+        edgesEl.append(line);
+        if (edge.kind === 'css-match') hasCssMatches = true;
+        continue;
+      }
       for(const hit of [true,false]){
         const el=document.createElementNS('http://www.w3.org/2000/svg','path');el.setAttribute('d',path);el.setAttribute('class',hit?'edge-hit':`edge${selectedEdge===edge.id?' selected':''}`);el.dataset.edge=edge.id;
         el.addEventListener('pointerdown',e=>{if(mode==='pan')return;e.stopPropagation();selected=null;selectedEdge=edge.id;source=null;render();toast('Conexión seleccionada. Pulsa Supr para eliminarla.');});edgesEl.append(el);
       }
     }
+    $('css-legend').hidden = !hasCssMatches;
   }
   function applyView(){world.style.transform=`translate(${view.x}px,${view.y}px) scale(${view.zoom})`;$('zoom-label').textContent=Math.round(view.zoom*100)+'%';canvas.style.backgroundSize=`${24*view.zoom}px ${24*view.zoom}px`;canvas.style.backgroundPosition=`${view.x}px ${view.y}px`;}
   function select(nodeId){if(document.activeElement===$('node-name'))$('node-name').blur();selected=nodeId;selectedEdge=null;render();}
   function activateNode(node) {
     select(node.id);
-    if (node.file) showFile(node.file);
+    if (node.code && nodes.some(candidate => candidate.code?.parent === node.id)) toggleCode(node);
+    else if (node.code) openCodeSource(node);
+    else if (node.file) showFile(node.file);
     else if (node.github) $('github-link').focus();
     else { $('node-name').focus(); $('node-name').select(); }
   }
@@ -88,18 +136,34 @@
     const n=nodes.find(n=>n.id===selected);$('inspector').hidden=!n||mode==='connect';if(!n)return;
     if(document.activeElement!==$('node-name')||$('node-name').dataset.nodeId!==n.id)$('node-name').value=n.label;
     $('node-name').dataset.nodeId=n.id;
-    $('node-name').readOnly = Boolean(n.github || n.file);
+    $('node-name').readOnly = Boolean(n.github || n.file || n.code);
     $('node-name').value = n.file ? n.file.path : n.github ? n.github.repo : $('node-name').value;
-    $('github-link').hidden = Boolean(n.file);
+    $('github-link').hidden = Boolean(n.file || n.code);
     $('github-link').textContent = n.github ? 'Cambiar repositorio o rama' : 'Vincular a GitHub';
     $('github-refresh').hidden = !n.github;
-    $('github-preview').hidden = !n.file;
+    $('github-preview').hidden = !n.file && !n.code;
+    $('github-preview').textContent = n.code ? 'Ver fragmento' : 'Ver contenido';
+    const canMap = n.file && /\.(html?|css)$/i.test(n.file.path) && !n.file.submodule;
+    $('code-map').hidden = !canMap || Boolean(n.mapReady);
+    const hasChildren = nodes.some(child => child.code?.parent === n.id);
+    $('code-expand').hidden = !hasChildren;
+    $('code-expand').textContent = n.mapCollapsed ? 'Desplegar hijos' : 'Plegar hijos';
+    const matches = edges.filter(edge => edge.kind === 'css-match' && (edge.from === n.id || edge.to === n.id));
+    $('code-matches').hidden = n.code?.kind !== 'css' || !matches.length;
+    $('code-detail').hidden = !n.code;
+    if (n.code) {
+      const detail = n.code.kind === 'css'
+        ? ` · ${matches.length} ${matches.length === 1 ? 'coincidencia' : 'coincidencias'} HTML`
+        : '';
+      $('code-detail').textContent = n.code.path + ' · ' + lineLabel(n.code) + detail;
+    }
     const url = n.github
       ? window.nodoGithub.githubUrl(n.github.repo, 'commit', n.github.sha)
-      : n.file && window.nodoGithub.githubUrl(n.file.repo, 'blob', n.file.commit, n.file.path);
+      : n.code ? codeSourceUrl(n.code) : n.file && window.nodoGithub.githubUrl(n.file.repo, 'blob', n.file.commit, n.file.path);
     $('github-open').hidden = !url;
     if (url) $('github-open').href = url;
-    $('duplicate').hidden = Boolean(n.github || n.file);
+    $('duplicate').hidden = Boolean(n.github || n.file || n.code);
+    $('delete').hidden = Boolean(n.code);
     [...$('colors').children].forEach((el,i)=>{el.classList.toggle('active',i===n.color);el.setAttribute('aria-pressed',String(i===n.color));});
   }
   palette.forEach((p,i)=>{const el=document.createElement('button');el.className='swatch';styleColor(el,i);el.title=p.name;el.setAttribute('aria-label',p.name);el.addEventListener('click',()=>{const n=nodes.find(n=>n.id===selected);if(!n||n.color===i)return;remember();n.color=i;render();persist();});$('colors').append(el);});
@@ -220,12 +284,33 @@
     const zoomDelta = zoomModifier ? dy : clamp(dy, -120, 120);
     zoomTo(view.zoom * Math.exp(-zoomDelta * .003), e.clientX - rect.left, e.clientY - rect.top);
   }, {passive:false});
-  function fit(){const r=canvas.getBoundingClientRect();if(!nodes.length){view={x:r.width*.38,y:r.height*.48,zoom:1};applyView();return;}const minX=Math.min(...nodes.map(n=>n.x))-85,maxX=Math.max(...nodes.map(n=>n.x))+85,minY=Math.min(...nodes.map(n=>n.y))-90,maxY=Math.max(...nodes.map(n=>n.y))+85;const availableWidth=Math.max(220,r.width-(r.width>800?390:48)),availableHeight=Math.max(180,r.height-290);view.zoom=clamp(Math.min(availableWidth/(maxX-minX),availableHeight/(maxY-minY),1.15),.25,2);view.x=r.width*(r.width>800?.46:.5)-(minX+maxX)/2*view.zoom;view.y=r.height*.5+15-(minY+maxY)/2*view.zoom;applyView();persist();}
+  function fit(){fitNodes(visibleNodes());}
+  function fitNodes(group) {
+    const r = canvas.getBoundingClientRect();
+    if (!group.length) {
+      view = {x:r.width*.38, y:r.height*.48, zoom:1};
+      applyView();
+      return;
+    }
+    const minX = Math.min(...group.map(n => n.x)) - 94;
+    const maxX = Math.max(...group.map(n => n.x)) + 94;
+    const minY = Math.min(...group.map(n => n.y)) - 94;
+    const maxY = Math.max(...group.map(n => n.y)) + 94;
+    const availableWidth = Math.max(220, r.width - (r.width > 800 ? 390 : 48));
+    const availableHeight = Math.max(180, r.height - 270);
+    view.zoom = clamp(Math.min(availableWidth/(maxX-minX), availableHeight/(maxY-minY), 1.15), .25, 2);
+    view.x = r.width * (r.width > 800 ? .46 : .5) - (minX + maxX) / 2 * view.zoom;
+    view.y = r.height * .5 + 15 - (minY + maxY) / 2 * view.zoom;
+    applyView();
+    persist();
+  }
   function removeSelected(){
     if (!selected && !selectedEdge) return;
+    if (nodes.some(node => node.id === selected && node.code)) return;
     remember();
     if (selected) {
       const removed = new Set([selected, ...nodes.filter(n => n.file?.parent === selected).map(n => n.id)]);
+      for (const node of nodes) if (node.code && removed.has(node.code.fileId)) removed.add(node.id);
       nodes = nodes.filter(n => !removed.has(n.id));
       edges = edges.filter(e => !removed.has(e.from) && !removed.has(e.to));
     } else edges = edges.filter(e => e.id !== selectedEdge);
@@ -284,13 +369,19 @@
         label:file.path.split('/').at(-1),
         file:{...file, parent:parent.id, repo:github.repo, commit:github.sha}
       };
+      if (original?.mapReady && original.file.sha === file.sha) {
+        child.mapReady = true;
+        child.mapCollapsed = original.mapCollapsed;
+      }
       if (!original) occupied.push(child);
       return child;
     });
     parent.github = github;
     const kept = new Set(children.map(child => child.id));
-    const removed = nodeId => previousIds.has(nodeId) && !kept.has(nodeId);
-    nodes = nodes.filter(node => !previousIds.has(node.id)).concat(children);
+    const validMaps = new Set(children.filter(child => child.mapReady).map(child => child.id));
+    const staleCodes = new Set(nodes.filter(node => node.code && previousIds.has(node.code.fileId) && !validMaps.has(node.code.fileId)).map(node => node.id));
+    const removed = nodeId => (previousIds.has(nodeId) && !kept.has(nodeId)) || staleCodes.has(nodeId);
+    nodes = nodes.filter(node => !previousIds.has(node.id) && !staleCodes.has(node.id)).concat(children);
     edges = edges.filter(edge => edge.repository !== parent.id && !removed(edge.from) && !removed(edge.to));
     edges = edges.concat(children.map(child => ({id:id(), from:parent.id, to:child.id, repository:parent.id})));
     return parent;
@@ -356,20 +447,183 @@
   }
   $('github-refresh').onclick = () => refreshRepo(nodes.find(node => node.id === selected));
 
-  async function showFile(file) {
+  const analysisCache = new Map();
+  let mapping = false;
+
+  async function analyzeFile(file) {
+    const key = file.repo + ':' + file.path + ':' + file.sha;
+    if (analysisCache.has(key)) return analysisCache.get(key);
+    const content = await window.nodoGithub.preview(file, AbortSignal.timeout(15000));
+    const analysis = /\.css$/i.test(file.path)
+      ? {parts:window.nodoCodeMap.parseCss(content)}
+      : window.nodoCodeMap.parseHtml(content);
+    if (analysisCache.size >= 16) analysisCache.delete(analysisCache.keys().next().value);
+    analysisCache.set(key, analysis);
+    return analysis;
+  }
+
+  function placeVisibleCode() {
+    const visible = visibleNodes();
+    const byId = new Map(visible.map(node => [node.id, node]));
+    const positioned = visible.filter(node => !node.code || node.mapPlaced);
+    const siblings = new Map();
+    for (const node of visible) {
+      if (!node.code) continue;
+      if (!siblings.has(node.code.parent)) siblings.set(node.code.parent, []);
+      siblings.get(node.code.parent).push(node);
+    }
+    for (const [parentId, children] of siblings) {
+      const parent = byId.get(parentId);
+      const rows = Math.min(5, children.length);
+      children.forEach((node, index) => {
+        if (node.mapPlaced) return;
+        const horizontal = children.length > 5;
+        node.x = parent.x + 178 + Math.floor(index / rows) * 148;
+        node.y = parent.y + (index % rows - (rows - 1) / 2) * 147;
+        while (positioned.some(other => Math.hypot(other.x - node.x, other.y - node.y) < (other.github ? 166 : 137))) {
+          if (horizontal) node.x += 148;
+          else node.y += 147;
+        }
+        node.mapPlaced = true;
+        positioned.push(node);
+      });
+    }
+  }
+
+  function attachStructure(fileNode, analysis) {
+    const byKey = new Map(analysis.parts.map(part => [part.key, id()]));
+    const deepParts = new Set(analysis.parts.filter(part => part.parent !== null).map(part => part.key));
+    const codeNodes = analysis.parts.map(part => ({
+      id:byKey.get(part.key),
+      x:fileNode.x, y:fileNode.y, color:part.kind === 'css' ? 2 : 3,
+      label:part.title,
+      mapCollapsed:deepParts.has(part.key),
+      code:{
+        fileId:fileNode.id, path:fileNode.file.path, parent:byKey.get(part.parent) ?? fileNode.id,
+        kind:part.kind, key:part.key, start:part.start, end:part.end
+      }
+    }));
+    fileNode.mapReady = true;
+    fileNode.mapCollapsed = false;
+    nodes = nodes.concat(codeNodes);
+    edges = edges.concat(codeNodes.map(node => ({id:id(), from:node.code.parent, to:node.id, kind:'structure'})));
+    return byKey;
+  }
+
+  async function analyzeMatches(fileNode, analysis) {
+    const isCss = /\.css$/i.test(fileNode.file.path);
+    const siblings = nodes.filter(node => node.mapReady && node.file?.parent === fileNode.file.parent &&
+      (isCss ? /\.html?$/i : /\.css$/i).test(node.file.path));
+    return Promise.allSettled(siblings.map(async other => {
+      const parsed = await analyzeFile(other.file);
+      const matches = isCss
+        ? window.nodoCodeMap.cssMatches(analysis.parts, fileNode.file.path, parsed, other.file.path)
+        : window.nodoCodeMap.cssMatches(parsed.parts, other.file.path, analysis, fileNode.file.path);
+      return {other, matches, isCss};
+    }));
+  }
+
+  function addCodeMatches(fileNode, mapKeys, results) {
+    for (const result of results) {
+      if (result.status !== 'fulfilled') continue;
+      const {other, matches, isCss} = result.value;
+      if (!nodes.includes(other)) continue;
+      const otherKeys = new Map(nodes.filter(node => node.code?.fileId === other.id).map(node => [node.code.key, node.id]));
+      for (const match of matches) {
+        const from = (isCss ? mapKeys : otherKeys).get(match.cssKey);
+        const to = (isCss ? otherKeys : mapKeys).get(match.htmlKey);
+        if (from && to) edges.push({id:id(), from, to, kind:'css-match'});
+      }
+    }
+  }
+
+  $('code-map').onclick = async () => {
+    const fileNode = nodes.find(node => node.id === selected);
+    if (!fileNode?.file || fileNode.mapReady || mapping) return;
+    mapping = true;
+    $('code-map').disabled = true;
+    toast('Analizando el código…');
+    try {
+      const analysis = await analyzeFile(fileNode.file);
+      const matches = await analyzeMatches(fileNode, analysis);
+      if (!nodes.includes(fileNode) || fileNode.mapReady) return;
+      if (!analysis.parts.length) {
+        toast('No se encontraron estructuras para desplegar.');
+        return;
+      }
+      remember();
+      const mapKeys = attachStructure(fileNode, analysis);
+      addCodeMatches(fileNode, mapKeys, matches);
+      placeVisibleCode();
+      render();
+      if (selected === fileNode.id) fitNodes(visibleNodes().filter(node => node.id === fileNode.id || node.code?.fileId === fileNode.id));
+      persist();
+      const partial = matches.some(result => result.status === 'rejected');
+      toast(partial ? 'Mapa creado. Algunas coincidencias no se pudieron comprobar.' : 'Estructura del archivo desplegada.');
+    } catch (error) {
+      toast(error.message || 'No se pudo mapear el código.');
+    } finally {
+      mapping = false;
+      $('code-map').disabled = false;
+    }
+  };
+
+  function toggleCode(node) {
+    if (!node) return;
+    remember();
+    node.mapCollapsed = !node.mapCollapsed;
+    placeVisibleCode();
+    render();
+    if (!node.mapCollapsed) fitNodes(visibleNodes().filter(candidate => candidate === node || candidate.code?.parent === node.id));
+    persist();
+  }
+  $('code-expand').onclick = () => toggleCode(nodes.find(node => node.id === selected));
+
+  $('code-matches').onclick = () => {
+    const targets = new Set(edges.filter(edge => edge.kind === 'css-match' && edge.from === selected).map(edge => edge.to));
+    const byId = new Map(nodes.map(node => [node.id, node]));
+    remember();
+    for (const target of targets) {
+      let node = byId.get(target);
+      while (node?.code) {
+        node = byId.get(node.code.parent);
+        if (node) node.mapCollapsed = false;
+      }
+    }
+    placeVisibleCode();
+    render();
+    fitNodes(visibleNodes().filter(node => node.id === selected || targets.has(node.id)));
+    persist();
+  };
+
+  function codeSourceUrl(part) {
+    const file = nodes.find(node => node.id === part.fileId)?.file;
+    if (!file) return null;
+    const url = window.nodoGithub.githubUrl(file.repo, 'blob', file.commit, file.path);
+    const anchor = !part.start ? '' : '#L' + part.start + (part.end > part.start ? '-L' + part.end : '');
+    return url && url + anchor;
+  }
+
+  function openCodeSource(node) {
+    const file = nodes.find(candidate => candidate.id === node.code.fileId)?.file;
+    if (file) showFile(file, node.code);
+  }
+
+  async function showFile(file, part) {
     previewRequest?.abort();
     const request = new AbortController();
     previewRequest = request;
-    $('file-path').textContent = file.path;
+    $('file-path').textContent = part ? file.path + ' · ' + lineLabel(part) : file.path;
     $('file-content').textContent = '';
     $('file-content').hidden = true;
-    $('file-open').href = window.nodoGithub.githubUrl(file.repo, 'blob', file.commit, file.path);
+    $('file-open').href = part ? codeSourceUrl(part) : window.nodoGithub.githubUrl(file.repo, 'blob', file.commit, file.path);
     $('file-status').textContent = 'Cargando archivo…';
     if (!fileDialog.open) fileDialog.showModal();
     try {
       const content = await window.nodoGithub.preview(file, request.signal);
       if (request.signal.aborted) return;
-      $('file-content').textContent = content || 'Archivo vacío';
+      const text = part?.start ? content.split(/\r?\n/).slice(part.start - 1, part.end).join('\n') : content;
+      $('file-content').textContent = text || 'Archivo vacío';
       $('file-content').hidden = false;
       $('file-status').textContent = '';
     } catch (error) {
@@ -378,7 +632,8 @@
   }
   $('github-preview').onclick = () => {
     const node = nodes.find(candidate => candidate.id === selected);
-    if (node?.file) showFile(node.file);
+    if (node?.code) openCodeSource(node);
+    else if (node?.file) showFile(node.file);
   };
   $('file-close').onclick = () => fileDialog.close();
   fileDialog.addEventListener('close', () => previewRequest?.abort());

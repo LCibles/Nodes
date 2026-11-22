@@ -6,11 +6,13 @@ Un lienzo para crear ideas como nodos circulares, moverlas y conectarlas.
 
 ## Ejecutar localmente
 
-Requiere Node.js 22 o posterior. No requiere instalar paquetes ni compilar.
+Requiere Node.js 22 o posterior y pnpm. El mapa de código se genera con las dependencias fijadas en el proyecto.
 
 ```sh
 git clone https://github.com/LCibles/Nodes.git
 cd Nodes
+pnpm install --frozen-lockfile
+node scripts/build-code-map.mjs
 node scripts/serve.cjs
 ```
 
@@ -31,6 +33,8 @@ Si tu instalación de Node incluye npm, también puedes usar `npm start`, `npm r
 - Desplazar el lienzo, cambiar el zoom y ajustar la vista al tablero.
 - Deshacer cambios durante la sesión.
 - Guardar el tablero en el navegador y exportarlo a JSON.
+- Desplegar la jerarquía de HTML y los grupos de reglas CSS a partir de los nodos de archivo.
+- Abrir fragmentos y sus rangos en GitHub. Las líneas moradas unen grupos de CSS con los elementos que coinciden en el HTML que enlaza esa hoja.
 
 ## Estructura
 

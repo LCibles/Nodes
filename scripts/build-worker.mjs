@@ -1,11 +1,13 @@
 import {mkdir, readFile, writeFile} from 'node:fs/promises';
+import './build-code-map.mjs';
 
 const root = new URL('../', import.meta.url);
 const types = {
   'index.html':'text/html',
   'style.css':'text/css',
   'app.js':'text/javascript',
-  'github.js':'text/javascript'
+  'github.js':'text/javascript',
+  'code-map.js':'text/javascript'
 };
 const assets = Object.fromEntries(await Promise.all(Object.entries(types).map(async ([file, type]) => [
   '/' + file, {type:type + '; charset=utf-8', body:await readFile(new URL('dist/' + file, root), 'utf8')}

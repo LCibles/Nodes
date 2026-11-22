@@ -1,5 +1,6 @@
 node_modules/
 dist/server/
+dist/code-map.js
 dist/.openai/
 .sites-local/
 *.tar.gz
