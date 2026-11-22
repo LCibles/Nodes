@@ -1,3 +1,4 @@
+import {parse as parseScript} from 'acorn';
 import {parse as parseDocument} from 'parse5';
 import {adapter} from 'parse5-htmlparser2-tree-adapter';
 import {parse as parseStylesheet, generate} from 'css-tree';
@@ -117,6 +118,57 @@ export function parseCss(source) {
   return parts.map(({lastOffset, heading, ...part}) => ({...part, selectors:[...new Set(part.selectors)]}));
 }
 
+export function parseJavaScript(source) {
+  let comments, tokens;
+  for (const sourceType of ['module', 'script']) {
+    comments = [];
+    tokens = [];
+    try {
+      parseScript(source, {ecmaVersion:'latest', sourceType, locations:true, onComment:comments, onToken:tokens});
+      break;
+    } catch (error) {
+      if (sourceType === 'script') throw new Error('No se pudo leer la sintaxis de este archivo JavaScript.');
+    }
+  }
+
+  const headings = [];
+  for (const comment of comments) {
+    const {start, end} = comment.loc;
+    const before = source.slice(comment.start - start.column, comment.start);
+    if (before.trim() || source.startsWith('#!', comment.start)) continue;
+    const title = comment.value.replace(/^\s*\* ?/gm, '').trim();
+    if (!title) continue;
+    const previous = headings.at(-1);
+    if (previous?.lineComment && comment.type === 'Line' && start.line === previous.lastLine + 1) {
+      previous.title += '\n' + title;
+      previous.lastLine = end.line;
+      previous.endOffset = comment.end;
+    } else {
+      headings.push({
+        title, start:start.line, lastLine:end.line,
+        offset:comment.start, endOffset:comment.end, lineComment:comment.type === 'Line'
+      });
+    }
+  }
+
+  const parts = [];
+  let tokenIndex = 0;
+  for (const [index, heading] of headings.entries()) {
+    const next = headings[index + 1]?.offset ?? source.length;
+    let lastCode;
+    while (tokenIndex < tokens.length && tokens[tokenIndex].start < next) {
+      const token = tokens[tokenIndex++];
+      if (token.start >= heading.endOffset) lastCode = token;
+    }
+    if (!lastCode) continue;
+    parts.push({
+      key:String(parts.length), parent:null, kind:'js', title:heading.title,
+      start:heading.start, end:lastCode.loc.end.line
+    });
+  }
+  return parts;
+}
+
 function stylesheetPath(htmlPath, href) {
   const base = 'https://nodes.invalid/';
   try {
@@ -154,4 +206,4 @@ export function cssMatches(groups, cssPath, html, htmlPath) {
   return matches;
 }
 
-window.nodoCodeMap = {parseHtml, parseCss, cssMatches};
+window.nodoCodeMap = {parseHtml, parseCss, parseJavaScript, cssMatches};

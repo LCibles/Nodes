@@ -2,6 +2,13 @@
   'use strict';
   const $ = id => document.getElementById(id);
   const canvas = $('canvas'), world = $('world'), nodesEl = $('nodes'), edgesEl = $('edges');
+  const commentTooltip = document.createElement('div');
+  commentTooltip.id = 'comment-tooltip';
+  commentTooltip.setAttribute('role', 'tooltip');
+  commentTooltip.hidden = true;
+  document.body.append(commentTooltip);
+  let tooltipTarget;
+  let tooltipTimer;
   const palette = [
     {name:'Salvia',bg:'#e0e9d5',border:'#91a87a',ink:'#425d35'},
     {name:'Arena',bg:'#f2e8d4',border:'#ccba91',ink:'#826c45'},
@@ -50,7 +57,50 @@
     return part.start === part.end ? `Línea ${part.start}` : `Líneas ${part.start}–${part.end}`;
   }
 
+  function hideComment() {
+    clearTimeout(tooltipTimer);
+    tooltipTarget = null;
+    commentTooltip.hidden = true;
+  }
+
+  function showComment(node, comment) {
+    if (drag?.moved) return;
+    clearTimeout(tooltipTimer);
+    tooltipTarget = node;
+    commentTooltip.textContent = comment;
+    commentTooltip.hidden = false;
+    commentTooltip.scrollTop = 0;
+    const anchor = node.getBoundingClientRect();
+    const {width, height} = commentTooltip.getBoundingClientRect();
+    const gap = 8;
+    const paddedWidth = document.documentElement.clientWidth;
+    const paddedHeight = document.documentElement.clientHeight;
+    const x = clamp(anchor.left + (anchor.width - width) / 2, gap, Math.max(gap, paddedWidth - width - gap));
+    const below = anchor.bottom + gap;
+    const above = anchor.top - height - gap;
+    const preferredY = below + height <= paddedHeight - gap ? below : above;
+    const y = clamp(preferredY, gap, Math.max(gap, paddedHeight - height - gap));
+    commentTooltip.style.left = x + 'px';
+    commentTooltip.style.top = y + 'px';
+  }
+
+  function scheduleHideComment() {
+    clearTimeout(tooltipTimer);
+    tooltipTimer = setTimeout(hideComment, 140);
+  }
+
+  commentTooltip.addEventListener('pointerenter', () => clearTimeout(tooltipTimer));
+  commentTooltip.addEventListener('pointerleave', () => {
+    if (!tooltipTarget?.matches(':focus-visible')) scheduleHideComment();
+  });
+  document.addEventListener('keydown', event => {
+    if (event.key !== 'Escape' || commentTooltip.hidden) return;
+    hideComment();
+    event.stopPropagation();
+  }, {capture:true});
+
   function render(){
+    hideComment();
     const visible = visibleNodes();
     nodesEl.replaceChildren();
     visible.forEach((n,i)=>{
@@ -72,8 +122,23 @@
         el.setAttribute('aria-label', n.file.path);
       } else if (n.code) {
         el.classList.add('code-node', n.code.kind + '-part');
-        el.title = n.code.path + ' · ' + n.label + ' · ' + lineLabel(n.code);
-        el.setAttribute('aria-label', el.title);
+        const description = n.code.path + ' · ' + n.label + ' · ' + lineLabel(n.code);
+        el.setAttribute('aria-label', description);
+        if (n.code.kind === 'css' || n.code.kind === 'js') {
+          el.classList.add('comment-node');
+          el.addEventListener('pointerenter', event => {
+            if (event.pointerType !== 'touch') showComment(el, n.label);
+          });
+          el.addEventListener('pointerleave', () => {
+            if (tooltipTarget === el && !el.matches(':focus-visible')) scheduleHideComment();
+          });
+          el.addEventListener('focus', () => {
+            if (el.matches(':focus-visible')) showComment(el, n.label);
+          });
+          el.addEventListener('blur', () => {
+            if (tooltipTarget === el && !el.matches(':hover')) hideComment();
+          });
+        } else el.title = description;
         const name = document.createElement('span');
         name.className = 'code-part-name';
         name.textContent = n.label;
@@ -143,7 +208,7 @@
     $('github-refresh').hidden = !n.github;
     $('github-preview').hidden = !n.file && !n.code;
     $('github-preview').textContent = n.code ? 'Ver fragmento' : 'Ver contenido';
-    const canMap = n.file && /\.(html?|css)$/i.test(n.file.path) && !n.file.submodule;
+    const canMap = n.file && /\.(html?|css|[cm]?js)$/i.test(n.file.path) && !n.file.submodule;
     $('code-map').hidden = !canMap || Boolean(n.mapReady);
     const hasChildren = nodes.some(child => child.code?.parent === n.id);
     $('code-expand').hidden = !hasChildren;
@@ -209,6 +274,7 @@
     const dx = e.clientX - drag.startX;
     const dy = e.clientY - drag.startY;
     if (!drag.moved && Math.hypot(dx, dy) <= dragThreshold) return;
+    if (!drag.moved) hideComment();
     drag.moved = true;
     stationaryClicks = 0;
     if (drag.type === 'node') {
@@ -267,6 +333,7 @@
     const dx = e.deltaX * unit;
     const dy = e.deltaY * unit;
     if (dx === 0 && dy === 0) return;
+    hideComment();
     stationaryClicks = 0;
     if (drag) {
       drag.canCreate = false;
@@ -454,9 +521,10 @@
     const key = file.repo + ':' + file.path + ':' + file.sha;
     if (analysisCache.has(key)) return analysisCache.get(key);
     const content = await window.nodoGithub.preview(file, AbortSignal.timeout(15000));
-    const analysis = /\.css$/i.test(file.path)
-      ? {parts:window.nodoCodeMap.parseCss(content)}
-      : window.nodoCodeMap.parseHtml(content);
+    let analysis;
+    if (/\.css$/i.test(file.path)) analysis = {parts:window.nodoCodeMap.parseCss(content)};
+    else if (/\.[cm]?js$/i.test(file.path)) analysis = {parts:window.nodoCodeMap.parseJavaScript(content)};
+    else analysis = window.nodoCodeMap.parseHtml(content);
     if (analysisCache.size >= 16) analysisCache.delete(analysisCache.keys().next().value);
     analysisCache.set(key, analysis);
     return analysis;
@@ -511,6 +579,7 @@
   }
 
   async function analyzeMatches(fileNode, analysis) {
+    if (/\.[cm]?js$/i.test(fileNode.file.path)) return [];
     const isCss = /\.css$/i.test(fileNode.file.path);
     const siblings = nodes.filter(node => node.mapReady && node.file?.parent === fileNode.file.parent &&
       (isCss ? /\.html?$/i : /\.css$/i).test(node.file.path));

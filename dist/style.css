@@ -38,3 +38,23 @@
 .code-node .node-label { overflow:hidden; }
 .code-part-name { display:-webkit-box; -webkit-box-orient:vertical; -webkit-line-clamp:4; overflow:hidden; }
 .css-match-edge.focused { stroke:#702f88; stroke-width:4; }
+
+.comment-node .code-part-name { -webkit-line-clamp:2; }
+#comment-tooltip {
+  position:fixed;
+  z-index:10;
+  width:max-content;
+  max-width:min(360px, calc(100vw - 16px));
+  max-height:min(420px, calc(100dvh - 16px));
+  overflow:auto;
+  padding:10px 13px;
+  border:1px solid #364f43;
+  border-radius:8px;
+  background:#253e33;
+  color:#fff;
+  font-size:13px;
+  line-height:1.5;
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  box-shadow:0 5px 16px #22382d25;
+}
